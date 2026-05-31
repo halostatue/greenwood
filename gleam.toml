@@ -1,0 +1,28 @@
+name = "greenwood"
+version = "0.1.0"
+description = "A generic trivia-preserving concrete syntax tree for Gleam"
+licences = ["Apache-2.0"]
+gleam = ">= 1.14.0"
+
+[repository]
+type = "github"
+user = "halostatue"
+repo = "greenwood"
+
+[dependencies]
+gleam_stdlib = ">= 0.44.0 and < 2.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
+glinter = ">= 2.15.0 and < 3.0.0"
+
+[tools.glinter]
+stats = true
+
+[tools.glinter.rules]
+ffi_usage = "warning"
+function_complexity = "warning"
+module_complexity = "warning"
+
+[javascript.deno]
+allow_read = ["gleam.toml", "test"]
