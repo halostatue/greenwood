@@ -572,6 +572,94 @@ pub fn left_n_negative_equals_right_n_test() {
   assert via_left_neg.focus == via_right_pos.focus
 }
 
+fn mixed_sibling_tree() -> greenwood.Node(Kind) {
+  greenwood.node(Root, [
+    NodeElement(greenwood.node(Parent, [leaf("a")])),
+    NodeElement(greenwood.node(Child, [leaf("b")])),
+    NodeElement(greenwood.node(Parent, [leaf("c")])),
+    NodeElement(greenwood.node(Child, [leaf("d")])),
+    NodeElement(greenwood.node(Parent, [leaf("e")])),
+  ])
+}
+
+pub fn right_n_where_moves_to_nth_match_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("a")] })
+  let assert Some(z2) =
+    greenwood.right_n_where(z, 2, fn(n) { n.kind == Parent })
+  assert z2.focus.children == [leaf("e")]
+}
+
+pub fn right_n_where_zero_is_identity_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("b")] })
+  let assert Some(z2) =
+    greenwood.right_n_where(z, 0, fn(n) { n.kind == Parent })
+  assert z2.focus == z.focus
+}
+
+pub fn right_n_where_overshoot_returns_none_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("a")] })
+  assert None == greenwood.right_n_where(z, 5, fn(n) { n.kind == Parent })
+}
+
+pub fn right_n_where_negative_equals_left_n_where_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("e")] })
+  let assert Some(via_right_neg) =
+    greenwood.right_n_where(z, -2, fn(n) { n.kind == Parent })
+  let assert Some(via_left_pos) =
+    greenwood.left_n_where(z, 2, fn(n) { n.kind == Parent })
+  assert via_right_neg.focus == via_left_pos.focus
+}
+
+pub fn left_n_where_moves_to_nth_match_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("e")] })
+  let assert Some(z2) = greenwood.left_n_where(z, 2, fn(n) { n.kind == Parent })
+  assert z2.focus.children == [leaf("a")]
+}
+
+pub fn left_n_where_zero_is_identity_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("d")] })
+  let assert Some(z2) = greenwood.left_n_where(z, 0, fn(n) { n.kind == Parent })
+  assert z2.focus == z.focus
+}
+
+pub fn left_n_where_overshoot_returns_none_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("e")] })
+  assert None == greenwood.left_n_where(z, 5, fn(n) { n.kind == Parent })
+}
+
+pub fn left_n_where_negative_equals_right_n_where_test() {
+  let tree = mixed_sibling_tree()
+  let assert Some(z) =
+    greenwood.zip(tree)
+    |> greenwood.down_where(fn(n) { n.children == [leaf("a")] })
+  let assert Some(via_left_neg) =
+    greenwood.left_n_where(z, -2, fn(n) { n.kind == Parent })
+  let assert Some(via_right_pos) =
+    greenwood.right_n_where(z, 2, fn(n) { n.kind == Parent })
+  assert via_left_neg.focus == via_right_pos.focus
+}
+
 fn deep_tree() -> greenwood.Node(Kind) {
   greenwood.node(Root, [
     NodeElement(
