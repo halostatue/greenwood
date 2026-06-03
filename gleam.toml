@@ -1,5 +1,5 @@
 name = "greenwood"
-version = "1.0.0"
+version = "1.1.0"
 description = "A generic trivia-preserving concrete syntax tree for Gleam"
 licences = ["Apache-2.0"]
 gleam = ">= 1.14.0"

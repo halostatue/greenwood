@@ -140,6 +140,7 @@
 //// [dn]: https://github.com/dotnet/roslyn/blob/main/docs/wiki/Roslyn-Overview.md#syntax-trivia
 //// [rust]: https://github.com/rust-analyzer/rowan
 
+import gleam/bool
 import gleam/list
 import gleam/option.{type Option, None, Some}
 
@@ -449,10 +450,8 @@ pub fn replace_child(
 ) -> Node(kind) {
   let children =
     list.index_map(node.children, fn(el, i) {
-      case i == index {
-        True -> element
-        False -> el
-      }
+      use <- bool.guard(i == index, return: element)
+      el
     })
   Node(..node, children:)
 }
@@ -592,15 +591,15 @@ pub fn zip(root: Node(kind)) -> Zipper(kind) {
 ///
 /// `cursor`
 pub fn down(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  down_where(zipper, fn(_) { True })
+  down_where(zipper:, predicate: fn(_) { True })
 }
 
 /// Move focus to the first child Node matching a predicate.
 ///
 /// `cursor`
 pub fn down_where(
-  zipper: Zipper(kind),
-  predicate: fn(Node(kind)) -> Bool,
+  zipper zipper: Zipper(kind),
+  predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
   do_down(zipper.focus, predicate, zipper.crumbs, [])
 }
@@ -611,7 +610,7 @@ pub fn down_where(
 ///
 /// `cursor`
 pub fn left(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  left_where(zipper, fn(_) { True })
+  left_where(zipper:, predicate: fn(_) { True })
 }
 
 /// Move focus to the nearest sibling Node to the left matching a predicate.
@@ -621,8 +620,8 @@ pub fn left(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
 ///
 /// `cursor`
 pub fn left_where(
-  zipper: Zipper(kind),
-  predicate: fn(Node(kind)) -> Bool,
+  zipper zipper: Zipper(kind),
+  predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
   case zipper.crumbs {
     [] -> None
@@ -654,7 +653,7 @@ pub fn left_where(
 ///
 /// `cursor`
 pub fn right(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  right_where(zipper, fn(_) { True })
+  right_where(zipper:, predicate: fn(_) { True })
 }
 
 /// Move focus to the nearest sibling Node to the right matching a predicate.
@@ -664,8 +663,8 @@ pub fn right(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
 ///
 /// `cursor`
 pub fn right_where(
-  zipper: Zipper(kind),
-  predicate: fn(Node(kind)) -> Bool,
+  zipper zipper: Zipper(kind),
+  predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
   case zipper.crumbs {
     [] -> None
@@ -728,9 +727,35 @@ pub fn up_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
 ///
 /// `cursor`
 pub fn left_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
-  case n < 0 {
-    True -> repeat_move(zipper, -n, right)
-    False -> repeat_move(zipper, n, left)
+  use <- bool.guard(n < 0, return: repeat_move(zipper, -n, right))
+
+  repeat_move(zipper, n, left)
+}
+
+/// Move focus `n` sibling Nodes to the left where those nodes match
+/// a predicate. Strict: returns `None` if the move cannot be completed in full.
+///
+/// Token siblings (whitespace, comments stored inline) are skipped and remain
+/// in place between the old and new focus.
+///
+/// `left_n_where(zipper:, by: 0, predicate:)` returns `Some(zipper)`. Negative
+/// `n` flips direction: `left_n_where(zipper:, by: -n, predicate:)` is
+/// equivalent to `right_n_where(zipper:, by: n, predicate:)`
+///
+/// `cursor`
+pub fn left_n_where(
+  zipper zipper: Zipper(kind),
+  by n: Int,
+  predicate predicate: fn(Node(kind)) -> Bool,
+) -> Option(Zipper(kind)) {
+  case n {
+    0 -> Some(zipper)
+    _ if n < 0 -> right_n_where(zipper:, by: -n, predicate:)
+    _ ->
+      case left_where(zipper:, predicate:) {
+        Some(zipper) -> left_n_where(zipper:, by: n - 1, predicate:)
+        None -> None
+      }
   }
 }
 
@@ -742,9 +767,35 @@ pub fn left_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
 ///
 /// `cursor`
 pub fn right_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
-  case n < 0 {
-    True -> repeat_move(zipper, -n, left)
-    False -> repeat_move(zipper, n, right)
+  use <- bool.guard(n < 0, return: repeat_move(zipper, -n, left))
+
+  repeat_move(zipper, n, right)
+}
+
+/// Move focus `n` sibling Nodes to the right where those nodes match
+/// a predicate. Strict: returns `None` if the move cannot be completed in full.
+///
+/// Token siblings (whitespace, comments stored inline) are skipped and remain
+/// in place between the old and new focus.
+///
+/// `right_n_where(zipper:, by: 0, predicate:)` returns `Some(zipper)`. Negative
+/// `n` flips direction: `right_n_where(zipper:, by: -n, predicate:)` is
+/// equivalent to `left_n_where(zipper:, by: n, predicate:)`
+///
+/// `cursor`
+pub fn right_n_where(
+  zipper zipper: Zipper(kind),
+  by n: Int,
+  predicate predicate: fn(Node(kind)) -> Bool,
+) -> Option(Zipper(kind)) {
+  case n {
+    0 -> Some(zipper)
+    _ if n < 0 -> left_n_where(zipper:, by: -n, predicate:)
+    _ ->
+      case right_where(zipper:, predicate:) {
+        Some(zipper) -> right_n_where(zipper:, by: n - 1, predicate:)
+        None -> None
+      }
   }
 }
 
@@ -784,19 +835,16 @@ fn do_find_descendant(
 ) -> Option(Element(kind)) {
   case elements {
     [] -> None
-    [el, ..rest] ->
-      case predicate(el) {
-        True -> Some(el)
-        False ->
-          case el {
-            NodeElement(child) ->
-              case do_find_descendant(child.children, predicate) {
-                Some(found) -> Some(found)
-                None -> do_find_descendant(rest, predicate)
-              }
-            TokenElement(_) -> do_find_descendant(rest, predicate)
-          }
+    [el, ..rest] -> {
+      use <- bool.guard(predicate(el), return: Some(el))
+
+      case el {
+        NodeElement(child) ->
+          do_find_descendant(child.children, predicate)
+          |> option.lazy_or(fn() { do_find_descendant(rest, predicate) })
+        TokenElement(_) -> do_find_descendant(rest, predicate)
       }
+    }
   }
 }
 
@@ -808,11 +856,13 @@ fn do_replace_first(
 ) -> List(Element(kind)) {
   case elements {
     [] -> list.reverse(acc)
-    [el, ..rest] ->
-      case predicate(el) {
-        True -> list.append(list.reverse(acc), [replacement(el), ..rest])
-        False -> do_replace_first(rest, predicate, replacement, [el, ..acc])
-      }
+    [el, ..rest] -> {
+      use <- bool.guard(
+        predicate(el),
+        return: list.append(list.reverse(acc), [replacement(el), ..rest]),
+      )
+      do_replace_first(rest, predicate, replacement, [el, ..acc])
+    }
   }
 }
 
@@ -824,11 +874,13 @@ fn do_insert_before(
 ) -> List(Element(kind)) {
   case elements {
     [] -> list.reverse(acc)
-    [el, ..rest] ->
-      case predicate(el) {
-        True -> list.append(list.reverse(acc), [element, el, ..rest])
-        False -> do_insert_before(rest, predicate, element, [el, ..acc])
-      }
+    [el, ..rest] -> {
+      use <- bool.guard(
+        predicate(el),
+        return: list.append(list.reverse(acc), [element, el, ..rest]),
+      )
+      do_insert_before(rest, predicate, element, [el, ..acc])
+    }
   }
 }
 
@@ -840,11 +892,13 @@ fn do_insert_after(
 ) -> List(Element(kind)) {
   case elements {
     [] -> list.reverse(acc)
-    [el, ..rest] ->
-      case predicate(el) {
-        True -> list.append(list.reverse(acc), [el, element, ..rest])
-        False -> do_insert_after(rest, predicate, element, [el, ..acc])
-      }
+    [el, ..rest] -> {
+      use <- bool.guard(
+        predicate(el),
+        return: list.append(list.reverse(acc), [el, element, ..rest]),
+      )
+      do_insert_after(rest, predicate, element, [el, ..acc])
+    }
   }
 }
 
@@ -873,11 +927,10 @@ fn split_at_node(
 ) -> Option(#(List(Element(kind)), Node(kind), List(Element(kind)))) {
   case elements {
     [] -> None
-    [NodeElement(n), ..rest] ->
-      case predicate(n) {
-        True -> Some(#(left, n, rest))
-        False -> split_at_node(rest, predicate, [NodeElement(n), ..left])
-      }
+    [NodeElement(n), ..rest] -> {
+      use <- bool.guard(predicate(n), return: Some(#(left, n, rest)))
+      split_at_node(rest, predicate, [NodeElement(n), ..left])
+    }
     [other, ..rest] -> split_at_node(rest, predicate, [other, ..left])
   }
 }
@@ -893,11 +946,10 @@ fn scan_left(
 ) -> Option(#(List(Element(kind)), Node(kind), List(Element(kind)))) {
   case elements {
     [] -> None
-    [NodeElement(n), ..rest] ->
-      case predicate(n) {
-        True -> Some(#(rest, n, right))
-        False -> scan_left(rest, predicate, [NodeElement(n), ..right])
-      }
+    [NodeElement(n), ..rest] -> {
+      use <- bool.guard(predicate(n), return: Some(#(rest, n, right)))
+      scan_left(rest, predicate, [NodeElement(n), ..right])
+    }
     [other, ..rest] -> scan_left(rest, predicate, [other, ..right])
   }
 }
@@ -913,11 +965,10 @@ fn scan_right(
 ) -> Option(#(List(Element(kind)), Node(kind), List(Element(kind)))) {
   case elements {
     [] -> None
-    [NodeElement(n), ..rest] ->
-      case predicate(n) {
-        True -> Some(#(left, n, rest))
-        False -> scan_right(rest, predicate, [NodeElement(n), ..left])
-      }
+    [NodeElement(n), ..rest] -> {
+      use <- bool.guard(predicate(n), return: Some(#(left, n, rest)))
+      scan_right(rest, predicate, [NodeElement(n), ..left])
+    }
     [other, ..rest] -> scan_right(rest, predicate, [other, ..left])
   }
 }
