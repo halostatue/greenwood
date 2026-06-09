@@ -724,3 +724,160 @@ pub fn token_element_creates_token_element_test() {
   assert Leaf == tok.kind
   assert "hello" == tok.text
 }
+
+// --- traverse tests ---
+
+fn trivia_tree() -> greenwood.Node(Kind) {
+  greenwood.node_with_trivia(
+    Root,
+    [
+      NodeElement(greenwood.node_with_trivia(
+        Parent,
+        [leaf("a")],
+        Trivia(leading: [comment("// before parent")], trailing: [
+          comment("// after parent"),
+        ]),
+      )),
+      greenwood.TokenElement(greenwood.token(Leaf, "b")),
+    ],
+    Trivia(leading: [comment("// top")], trailing: [comment("// bottom")]),
+  )
+}
+
+pub fn traverse_empty_visitor_returns_acc_test() {
+  let tree = simple_tree()
+  let result =
+    greenwood.traverse(over: tree, from: 0, visitor: greenwood.visitor())
+  assert 0 == result
+}
+
+pub fn traverse_token_callback_visits_all_tokens_test() {
+  let tree = simple_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_token(fn(acc, _tok) { greenwood.Continue(acc + 1) })
+  let result = greenwood.traverse(over: tree, from: 0, visitor: v)
+  // 3 leaf tokens: a, b, c
+  assert 3 == result
+}
+
+pub fn traverse_enter_exit_called_on_root_test() {
+  let tree = simple_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_enter_node(fn(acc, _node) {
+      greenwood.Continue(["enter", ..acc])
+    })
+    |> greenwood.on_exit_node(fn(acc, _node) {
+      greenwood.Continue(["exit", ..acc])
+    })
+  let result = greenwood.traverse(over: tree, from: [], visitor: v)
+  // Root enter, 2 Parent enter/exit, Root exit = 6 events
+  let assert 6 = list.length(result)
+  // First event is Root enter (last in reversed list)
+  let assert ["enter", ..] = list.reverse(result)
+}
+
+pub fn traverse_trivia_callback_visits_trivia_tokens_test() {
+  let tree = trivia_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_trivia(fn(acc, tok) {
+      greenwood.Continue([tok.text, ..acc])
+    })
+  let result = greenwood.traverse(over: tree, from: [], visitor: v)
+  // Root leading: "// top", Parent leading: "// before parent",
+  // Parent trailing: "// after parent", Root trailing: "// bottom"
+  assert 4 == list.length(result)
+}
+
+pub fn traverse_skip_skips_children_and_exit_test() {
+  let tree = simple_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_enter_node(fn(acc, node) {
+      case node.kind {
+        Parent -> greenwood.Skip(acc)
+        _ -> greenwood.Continue(acc)
+      }
+    })
+    |> greenwood.on_token(fn(acc, _tok) { greenwood.Continue(acc + 1) })
+    |> greenwood.on_exit_node(fn(acc, _node) { greenwood.Continue(acc + 100) })
+  let result = greenwood.traverse(over: tree, from: 0, visitor: v)
+  // Tokens skipped (Parent children skipped), only Root exit = 100
+  assert 100 == result
+}
+
+pub fn traverse_stop_halts_immediately_test() {
+  let tree = simple_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_token(fn(acc, tok) {
+      case tok.text {
+        "b" -> greenwood.Stop(acc)
+        _ -> greenwood.Continue(acc + 1)
+      }
+    })
+  let result = greenwood.traverse(over: tree, from: 0, visitor: v)
+  // Visits "a" (acc=1), then stops at "b"
+  assert 1 == result
+}
+
+pub fn traverse_stop_from_trivia_halts_test() {
+  let tree = trivia_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_trivia(fn(_acc, tok) { greenwood.Stop(tok.text) })
+  let result = greenwood.traverse(over: tree, from: "", visitor: v)
+  assert "// top" == result
+}
+
+pub fn traverse_stop_from_exit_halts_test() {
+  let tree = simple_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_exit_node(fn(acc, node) {
+      case node.kind {
+        Parent -> greenwood.Stop(acc + 1)
+        _ -> greenwood.Continue(acc)
+      }
+    })
+  let result = greenwood.traverse(over: tree, from: 0, visitor: v)
+  // Stops at first Parent exit
+  assert 1 == result
+}
+
+pub fn traverse_none_trivia_skips_trivia_iteration_test() {
+  // When trivia callback is None, trivia tokens are never visited
+  let tree = trivia_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_token(fn(acc, _tok) { greenwood.Continue(acc + 1) })
+  let result = greenwood.traverse(over: tree, from: 0, visitor: v)
+  // Only real tokens: "a" and "b"
+  assert 2 == result
+}
+
+pub fn traverse_depth_tracking_test() {
+  let tree = simple_tree()
+  let v =
+    greenwood.visitor()
+    |> greenwood.on_enter_node(fn(acc, _node) {
+      let #(depth, max) = acc
+      let new_depth = depth + 1
+      let new_max = case new_depth > max {
+        True -> new_depth
+        False -> max
+      }
+      greenwood.Continue(#(new_depth, new_max))
+    })
+    |> greenwood.on_exit_node(fn(acc, _node) {
+      let #(depth, max) = acc
+      greenwood.Continue(#(depth - 1, max))
+    })
+  let #(final_depth, max_depth) =
+    greenwood.traverse(over: tree, from: #(0, 0), visitor: v)
+  // Should end at depth 0, max depth reached is 2 (Root → Parent)
+  assert 0 == final_depth
+  assert 2 == max_depth
+}

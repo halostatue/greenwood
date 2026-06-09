@@ -225,7 +225,8 @@ pub type Zipper(kind) {
   Zipper(focus: Node(kind), crumbs: List(Crumb(kind)))
 }
 
-/// A breadcrumb: the context needed to reconstruct a parent from a focused child.
+/// A breadcrumb: the context needed to reconstruct a parent from a focused
+/// child.
 ///
 /// `cursor`
 pub type Crumb(kind) {
@@ -234,6 +235,57 @@ pub type Crumb(kind) {
     trivia: Trivia(kind),
     left: List(Element(kind)),
     right: List(Element(kind)),
+  )
+}
+
+/// Controls how traversal proceeds after a visitor callback.
+///
+/// `traversal`
+pub type TraverseAction(a) {
+  /// Recurse into children (on enter_node) or continue to siblings (elsewhere).
+  Continue(a)
+  /// Skip this node's children and exit callback; proceed to siblings.
+  /// On exit_node/token/trivia, treated identically to `Continue`.
+  Skip(a)
+  /// Halt the entire traversal immediately and return the accumulator.
+  Stop(a)
+}
+
+/// A visitor controlling which actions are taken during `traverse`.
+///
+/// Each field is an `Option` where `None` implements a sensible default. For
+/// `token` and `trivia`, the default behaviour is to skip the processing and
+/// continue with the next node action. For `enter_node` and `exit_node`, the
+/// node itself is not processed, but child nodes are traversed.
+///
+/// Use `visitor()` to create a default visitor, then the `on_*` builders to
+/// attach callbacks.
+///
+/// ### Tracking depth
+///
+/// Depth is not passed to callbacks directly. Track it in your accumulator:
+///
+/// ```gleam
+/// type State { State(depth: Int, result: a) }
+///
+/// let visitor = greenwood.visitor()
+///   |> greenwood.on_enter_node(fn(s, _node) {
+///     Continue(State(..s, depth: s.depth + 1))
+///   })
+///   |> greenwood.on_exit_node(fn(s, _node) {
+///     Continue(State(..s, depth: s.depth - 1))
+///   })
+///
+/// greenwood.traverse(over: tree, from: State(0, initial), visitor:)
+/// ```
+///
+/// `traversal`
+pub type Visitor(kind, a) {
+  Visitor(
+    token: Option(fn(a, Token(kind)) -> TraverseAction(a)),
+    enter_node: Option(fn(a, Node(kind)) -> TraverseAction(a)),
+    exit_node: Option(fn(a, Node(kind)) -> TraverseAction(a)),
+    trivia: Option(fn(a, Token(kind)) -> TraverseAction(a)),
   )
 }
 
@@ -340,6 +392,81 @@ pub fn each_with_depth(
 /// `traversal`
 pub fn each(over node: Node(kind), with f: fn(Element(kind)) -> Nil) -> Nil {
   do_each(node.children, f)
+}
+
+/// Create a visitor with all callbacks set to `None` (no-op, always continues).
+///
+/// `traversal`
+pub fn visitor() -> Visitor(kind, a) {
+  Visitor(token: None, enter_node: None, exit_node: None, trivia: None)
+}
+
+/// Set the token callback on a visitor.
+///
+/// `traversal`
+pub fn on_token(
+  visitor v: Visitor(kind, a),
+  apply f: fn(a, Token(kind)) -> TraverseAction(a),
+) -> Visitor(kind, a) {
+  Visitor(..v, token: Some(f))
+}
+
+/// Set the enter_node callback on a visitor.
+///
+/// `traversal`
+pub fn on_enter_node(
+  visitor v: Visitor(kind, a),
+  apply f: fn(a, Node(kind)) -> TraverseAction(a),
+) -> Visitor(kind, a) {
+  Visitor(..v, enter_node: Some(f))
+}
+
+/// Set the exit_node callback on a visitor.
+///
+/// `traversal`
+pub fn on_exit_node(
+  visitor v: Visitor(kind, a),
+  apply f: fn(a, Node(kind)) -> TraverseAction(a),
+) -> Visitor(kind, a) {
+  Visitor(..v, exit_node: Some(f))
+}
+
+/// Set the trivia callback on a visitor.
+///
+/// `traversal`
+pub fn on_trivia(
+  visitor v: Visitor(kind, a),
+  apply f: fn(a, Token(kind)) -> TraverseAction(a),
+) -> Visitor(kind, a) {
+  Visitor(..v, trivia: Some(f))
+}
+
+/// Traverse a tree with a visitor, folding an accumulator through callbacks.
+///
+/// Visits the full tree including the root node in the following traversal
+/// order:
+///
+/// 1. Leading trivia (if `trivia` callback set)
+/// 2. `enter_node`
+/// 3. Children (tokens invoke `token`; nodes recurse)
+/// 4. Trailing trivia (if `trivia` callback set)
+/// 5. `exit_node`
+///
+/// `Stop` from any callback halts immediately. `Skip` from `enter_node` skips
+/// children and exit for that node. In all other cases `Skip` behaves like
+/// `Continue`.
+///
+/// `traversal`
+pub fn traverse(
+  over node: Node(kind),
+  from acc: a,
+  visitor visitor: Visitor(kind, a),
+) -> a {
+  case do_traverse_node(node:, acc:, visitor:) {
+    Continue(a) -> a
+    Skip(a) -> a
+    Stop(a) -> a
+  }
 }
 
 /// Map over immediate children of a node.
@@ -1041,4 +1168,109 @@ fn do_each(children: List(Element(kind)), f: fn(Element(kind)) -> Nil) -> Nil {
       TokenElement(_) -> Nil
     }
   })
+}
+
+fn do_traverse_node(
+  node node: Node(kind),
+  acc acc: a,
+  visitor visitor: Visitor(kind, a),
+) -> TraverseAction(a) {
+  // 1. Leading trivia
+  use acc <- traverse_trivia(trivia: leading_trivia(from: node), acc:, visitor:)
+  // 2. Enter node
+  use acc <- enter_node(node:, acc:, visitor:)
+  // 3. Children
+  case do_traverse_children(children: node.children, acc:, visitor:) {
+    Stop(_) as stop -> stop
+    Continue(acc) | Skip(acc) -> {
+      // 4. Trailing trivia
+      use acc <- traverse_trivia(
+        trivia: trailing_trivia(from: node),
+        acc:,
+        visitor:,
+      )
+      // 5. Exit node
+      case visitor.exit_node {
+        None -> Continue(acc)
+        Some(f) -> f(acc, node)
+      }
+    }
+  }
+}
+
+fn do_traverse_children(
+  children children: List(Element(kind)),
+  acc acc: a,
+  visitor visitor: Visitor(kind, a),
+) -> TraverseAction(a) {
+  case children {
+    [] -> Continue(acc)
+    [el, ..rest] -> {
+      let result = case el {
+        TokenElement(tok) ->
+          case visitor.token {
+            None -> Continue(acc)
+            Some(f) -> f(acc, tok)
+          }
+        NodeElement(child) -> do_traverse_node(node: child, acc:, visitor:)
+      }
+
+      case result {
+        Stop(_) as stop -> stop
+        Continue(acc) | Skip(acc) ->
+          do_traverse_children(children: rest, acc:, visitor:)
+      }
+    }
+  }
+}
+
+fn traverse_trivia(
+  trivia trivia: List(Token(kind)),
+  visitor visitor: Visitor(kind, a),
+  acc acc: a,
+  callback callback: fn(a) -> TraverseAction(a),
+) -> TraverseAction(a) {
+  let result = case visitor.trivia {
+    None -> Continue(acc)
+    Some(f) -> do_traverse_trivia(trivia:, acc:, f:)
+  }
+
+  case result {
+    Stop(_) as stop -> stop
+    Continue(acc) | Skip(acc) -> callback(acc)
+  }
+}
+
+fn enter_node(
+  node node: Node(kind),
+  visitor visitor: Visitor(kind, a),
+  acc acc: a,
+  callback callback: fn(a) -> TraverseAction(a),
+) -> TraverseAction(a) {
+  let result = case visitor.enter_node {
+    None -> Continue(acc)
+    Some(f) -> f(acc, node)
+  }
+
+  case result {
+    Stop(_) as stop -> stop
+    Skip(acc) -> Continue(acc)
+    Continue(acc) -> callback(acc)
+  }
+}
+
+fn do_traverse_trivia(
+  trivia trivia: List(Token(kind)),
+  acc acc: a,
+  f f: fn(a, Token(kind)) -> TraverseAction(a),
+) -> TraverseAction(a) {
+  case trivia {
+    [] -> Continue(acc)
+    [tok, ..rest] -> {
+      case f(acc, tok) {
+        Stop(_) as stop -> stop
+        Continue(acc) | Skip(acc) -> do_traverse_trivia(trivia: rest, acc:, f:)
+      }
+    }
+  }
 }
