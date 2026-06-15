@@ -725,6 +725,19 @@ pub fn token_element_creates_token_element_test() {
   assert "hello" == tok.text
 }
 
+pub fn implicit_token_creates_empty_text_test() {
+  let tok = greenwood.implicit_token(Leaf)
+  assert Leaf == tok.kind
+  assert "" == tok.text
+}
+
+pub fn implicit_token_element_creates_empty_text_element_test() {
+  let el = greenwood.implicit_token_element(Leaf)
+  let assert greenwood.TokenElement(tok) = el
+  assert Leaf == tok.kind
+  assert "" == tok.text
+}
+
 // --- traverse tests ---
 
 fn trivia_tree() -> greenwood.Node(Kind) {

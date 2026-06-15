@@ -14,10 +14,18 @@
 //// - `transformer`: transform a Greenwood tree
 //// - `traversal`: traverse a Greenwood tree
 //// - `trivia`: manage trivia on Greenwood tree node(s)
-//// - `cursor`: navigate and edit a Greenwood tree with a movable cursor
+//// - `cursor`: navigate and edit a Greenwood tree with a movable cursor,
+////   provided by `greenwood/zipper`
 ////
 //// Each function and type in the Greenwood interface is marked with the
 //// appropriate interface group or groups.
+////
+//// ### `Node`s and `Token`s
+////
+//// Greenwood distinguishes between `Node` elements (which may carry child
+//// nodes or tokens) and `Token` elements (which carry text). Both may carry
+//// meaning, but `Token` elements are used to represent leaf elements and the
+//// text associated with them.
 ////
 //// ### Trivia
 ////
@@ -88,10 +96,14 @@
 //// accounted for. Everything is assigned a meaning for preservation.
 ////
 //// ```gleam
-//// Function(
+//// Node(
+////   kind: Function,
 ////   trivia: Trivia(leading: [
-////     DocComment("/// Tail-recursive Fibonacci sequence implementation"),
-////     Newline("\n")
+////     Token(
+////      DocComment,
+////      "/// Tail-recursive Fibonacci sequence implementation",
+////     ),
+////     Token(Newline, "\n"),
 ////   ]),
 ////   children: [
 ////     Token(Pub, "pub"),
@@ -121,7 +133,7 @@
 ////       Token(LeftBrace, "{"),
 ////       Token(Newline, "\n"),
 ////       ...every token including whitespace, pipes, arrows...
-////     ]),
+////     ], Bare),
 ////     Token(Newline, "\n"),
 ////     Token(RightBrace, "}"),
 ////     Token(Newline, "\n"),
@@ -136,6 +148,16 @@
 ////
 //// This makes a concrete syntax tree useful for editors, language server
 //// implementations, and for edit-safe transformations.
+////
+//// > For sufficiently distinct nodes, it is possible to design the syntax tree
+//// > to be somewhere between a concrete tree and an abstract tree. As an
+//// > example, `LeftBrace` nodes always have only the text `"{"`, so the
+//// > representation could be `Token(LeftBrace, "")`.
+//// >
+//// > Greenwood v2 will support this use case explicitly with a new `Token`
+//// > variant, `ImplicitToken`. The current version provides constructor
+//// > functions to assist with this migration: `implicit_token` and
+//// > `implicit_token_element`.
 ////
 //// [dn]: https://github.com/dotnet/roslyn/blob/main/docs/wiki/Roslyn-Overview.md#syntax-trivia
 //// [rust]: https://github.com/rust-analyzer/rowan
@@ -225,8 +247,8 @@ pub type Zipper(kind) {
   Zipper(focus: Node(kind), crumbs: List(Crumb(kind)))
 }
 
-/// A breadcrumb: the context needed to reconstruct a parent from a focused
-/// child.
+/// A breadcrumb for a zipper: the context needed to reconstruct a parent from
+/// a focused child.
 ///
 /// `cursor`
 pub type Crumb(kind) {
@@ -344,11 +366,32 @@ pub fn token(kind kind: kind, text text: String) -> Token(kind) {
   Token(kind:, text:)
 }
 
-/// Create a token element. This is the same as `Token(kind:, text:)`.
+/// Create a token element. This is the same as `TokenElement(Token(kind:,
+/// text:))`.
 ///
 /// `builder`
 pub fn token_element(kind kind: kind, text text: String) -> Element(kind) {
   TokenElement(Token(kind:, text:))
+}
+
+/// Create an implicit token.
+///
+/// In greenwood v1, this is the same as `Token(kind:, text: "")`. In greenwood
+/// v2, it will be `ImplicitToken(kind:)`.
+///
+/// `builder`
+pub fn implicit_token(kind: kind) -> Token(kind) {
+  Token(kind:, text: "")
+}
+
+/// Create an implicit token element.
+///
+/// In greenwood v1, this is the same as `TokenElement(Token(kind:, text: ""))`.
+/// In greenwood v2, it will be `TokenElement(ImplicitToken(kind:))`.
+///
+/// `builder`
+pub fn implicit_token_element(kind: kind) -> Element(kind) {
+  TokenElement(Token(kind:, text: ""))
 }
 
 /// Recursively fold over all elements depth-first.
@@ -710,6 +753,8 @@ pub fn trailing_trivia(from node: Node(kind)) -> List(Token(kind)) {
 /// Create a zipper focused on the root node.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.zip` instead.
 pub fn zip(root: Node(kind)) -> Zipper(kind) {
   Zipper(focus: root, crumbs: [])
 }
@@ -717,13 +762,17 @@ pub fn zip(root: Node(kind)) -> Zipper(kind) {
 /// Move focus to the first child that is a Node.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.down` instead.
 pub fn down(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  down_where(zipper:, predicate: fn(_) { True })
+  do_down(zipper.focus, fn(_) { True }, zipper.crumbs, [])
 }
 
 /// Move focus to the first child Node matching a predicate.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.down_where` instead.
 pub fn down_where(
   zipper zipper: Zipper(kind),
   predicate predicate: fn(Node(kind)) -> Bool,
@@ -736,8 +785,10 @@ pub fn down_where(
 /// Returns `None` if the focus is the root or has no Node sibling to the left.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.left` instead.
 pub fn left(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  left_where(zipper:, predicate: fn(_) { True })
+  do_left(zipper)
 }
 
 /// Move focus to the nearest sibling Node to the left matching a predicate.
@@ -746,32 +797,13 @@ pub fn left(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
 /// in place between the old and new focus.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.left_where` instead.
 pub fn left_where(
   zipper zipper: Zipper(kind),
   predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
-  case zipper.crumbs {
-    [] -> None
-    [crumb, ..rest] ->
-      case
-        scan_left(crumb.left, predicate, [
-          NodeElement(zipper.focus),
-          ..crumb.right
-        ])
-      {
-        Some(#(new_left, new_focus, new_right)) -> {
-          let new_crumb =
-            Crumb(
-              kind: crumb.kind,
-              trivia: crumb.trivia,
-              left: new_left,
-              right: new_right,
-            )
-          Some(Zipper(focus: new_focus, crumbs: [new_crumb, ..rest]))
-        }
-        None -> None
-      }
-  }
+  do_left_where(zipper, predicate)
 }
 
 /// Move focus to the nearest sibling Node to the right of the focus.
@@ -779,8 +811,10 @@ pub fn left_where(
 /// Returns `None` if the focus is the root or has no Node sibling to the right.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.right` instead.
 pub fn right(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  right_where(zipper:, predicate: fn(_) { True })
+  do_right(zipper)
 }
 
 /// Move focus to the nearest sibling Node to the right matching a predicate.
@@ -789,51 +823,22 @@ pub fn right(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
 /// in place between the old and new focus.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.right_where` instead.
 pub fn right_where(
   zipper zipper: Zipper(kind),
   predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
-  case zipper.crumbs {
-    [] -> None
-    [crumb, ..rest] ->
-      case
-        scan_right(crumb.right, predicate, [
-          NodeElement(zipper.focus),
-          ..crumb.left
-        ])
-      {
-        Some(#(new_left, new_focus, new_right)) -> {
-          let new_crumb =
-            Crumb(
-              kind: crumb.kind,
-              trivia: crumb.trivia,
-              left: new_left,
-              right: new_right,
-            )
-          Some(Zipper(focus: new_focus, crumbs: [new_crumb, ..rest]))
-        }
-        None -> None
-      }
-  }
+  do_right_where(zipper, predicate)
 }
 
 /// Move focus back up to the parent.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.up` instead.
 pub fn up(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
-  case zipper.crumbs {
-    [] -> None
-    [crumb, ..rest] -> {
-      // `crumb.left` is stored nearest-first; reverse to restore source order.
-      let children =
-        list.append(list.reverse(crumb.left), [
-          NodeElement(zipper.focus),
-          ..crumb.right
-        ])
-      let parent = Node(kind: crumb.kind, children:, trivia: crumb.trivia)
-      Some(Zipper(focus: parent, crumbs: rest))
-    }
-  }
+  do_up(zipper)
 }
 
 /// Move focus up `n` parents. Strict: returns `None` if `n` is negative or if
@@ -842,8 +847,10 @@ pub fn up(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
 /// `up_n(z, by: 0)` returns `Some(z)`.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.up_n` instead.
 pub fn up_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
-  repeat_move(zipper, n, up)
+  repeat_move(zipper, n, do_up)
 }
 
 /// Move focus `n` sibling Nodes to the left. Strict: returns `None` if the
@@ -853,10 +860,12 @@ pub fn up_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
 /// `left_n(z, by: -n)` is equivalent to `right_n(z, by: n)`.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.left_n` instead.
 pub fn left_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
-  use <- bool.guard(n < 0, return: repeat_move(zipper, -n, right))
+  use <- bool.guard(n < 0, return: repeat_move(zipper, -n, do_right))
 
-  repeat_move(zipper, n, left)
+  repeat_move(zipper, n, do_left)
 }
 
 /// Move focus `n` sibling Nodes to the left where those nodes match
@@ -870,20 +879,14 @@ pub fn left_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
 /// equivalent to `right_n_where(zipper:, by: n, predicate:)`
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.left_n_where` instead.
 pub fn left_n_where(
   zipper zipper: Zipper(kind),
   by n: Int,
   predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
-  case n {
-    0 -> Some(zipper)
-    _ if n < 0 -> right_n_where(zipper:, by: -n, predicate:)
-    _ ->
-      case left_where(zipper:, predicate:) {
-        Some(zipper) -> left_n_where(zipper:, by: n - 1, predicate:)
-        None -> None
-      }
-  }
+  do_left_n_where(zipper, n, predicate)
 }
 
 /// Move focus `n` sibling Nodes to the right. Strict: returns `None` if the
@@ -893,10 +896,12 @@ pub fn left_n_where(
 /// `right_n(z, by: -n)` is equivalent to `left_n(z, by: n)`.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.right_n` instead.
 pub fn right_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
-  use <- bool.guard(n < 0, return: repeat_move(zipper, -n, left))
+  use <- bool.guard(n < 0, return: repeat_move(zipper, -n, do_left))
 
-  repeat_move(zipper, n, right)
+  repeat_move(zipper, n, do_right)
 }
 
 /// Move focus `n` sibling Nodes to the right where those nodes match
@@ -910,25 +915,21 @@ pub fn right_n(zipper zipper: Zipper(kind), by n: Int) -> Option(Zipper(kind)) {
 /// equivalent to `left_n_where(zipper:, by: n, predicate:)`
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.right_n_where` instead.
 pub fn right_n_where(
   zipper zipper: Zipper(kind),
   by n: Int,
   predicate predicate: fn(Node(kind)) -> Bool,
 ) -> Option(Zipper(kind)) {
-  case n {
-    0 -> Some(zipper)
-    _ if n < 0 -> left_n_where(zipper:, by: -n, predicate:)
-    _ ->
-      case right_where(zipper:, predicate:) {
-        Some(zipper) -> right_n_where(zipper:, by: n - 1, predicate:)
-        None -> None
-      }
-  }
+  do_right_n_where(zipper, n, predicate)
 }
 
 /// Replace the focused node and return the updated zipper.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.set_focus` instead.
 pub fn set_focus(
   zipper zipper: Zipper(kind),
   node node: Node(kind),
@@ -939,6 +940,8 @@ pub fn set_focus(
 /// Apply a transform to the focused node.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.map_focus` instead.
 pub fn map_focus(
   zipper: Zipper(kind),
   with f: fn(Node(kind)) -> Node(kind),
@@ -949,11 +952,10 @@ pub fn map_focus(
 /// Reconstruct the full tree from a zipper by moving up to the root.
 ///
 /// `cursor`
+///
+/// _Deprecated_: Use `greenwood/zipper.unzip` instead.
 pub fn unzip(zipper: Zipper(kind)) -> Node(kind) {
-  case up(zipper) {
-    Some(parent_zipper) -> unzip(parent_zipper)
-    None -> zipper.focus
-  }
+  do_unzip(zipper)
 }
 
 fn do_find_descendant(
@@ -1026,6 +1028,124 @@ fn do_insert_after(
       )
       do_insert_after(rest, predicate, element, [el, ..acc])
     }
+  }
+}
+
+fn do_unzip(zipper: Zipper(kind)) -> Node(kind) {
+  case do_up(zipper) {
+    Some(parent_zipper) -> do_unzip(parent_zipper)
+    None -> zipper.focus
+  }
+}
+
+fn do_left_n_where(
+  zipper: Zipper(kind),
+  n: Int,
+  predicate: fn(Node(kind)) -> Bool,
+) -> Option(Zipper(kind)) {
+  case n {
+    0 -> Some(zipper)
+    _ if n < 0 -> do_right_n_where(zipper, -n, predicate)
+    _ ->
+      case do_left_where(zipper, predicate) {
+        Some(z) -> do_left_n_where(z, n - 1, predicate)
+        None -> None
+      }
+  }
+}
+
+fn do_right_n_where(
+  zipper: Zipper(kind),
+  n: Int,
+  predicate: fn(Node(kind)) -> Bool,
+) -> Option(Zipper(kind)) {
+  case n {
+    0 -> Some(zipper)
+    _ if n < 0 -> do_left_n_where(zipper, -n, predicate)
+    _ ->
+      case do_right_where(zipper, predicate) {
+        Some(z) -> do_right_n_where(z, n - 1, predicate)
+        None -> None
+      }
+  }
+}
+
+fn do_up(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
+  case zipper.crumbs {
+    [] -> None
+    [crumb, ..rest] -> {
+      let children =
+        list.append(list.reverse(crumb.left), [
+          NodeElement(zipper.focus),
+          ..crumb.right
+        ])
+      let parent = Node(kind: crumb.kind, children:, trivia: crumb.trivia)
+      Some(Zipper(focus: parent, crumbs: rest))
+    }
+  }
+}
+
+fn do_left(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
+  do_left_where(zipper, fn(_) { True })
+}
+
+fn do_left_where(
+  zipper: Zipper(kind),
+  predicate: fn(Node(kind)) -> Bool,
+) -> Option(Zipper(kind)) {
+  case zipper.crumbs {
+    [] -> None
+    [crumb, ..rest] ->
+      case
+        scan_left(crumb.left, predicate, [
+          NodeElement(zipper.focus),
+          ..crumb.right
+        ])
+      {
+        Some(#(new_left, new_focus, new_right)) -> {
+          let new_crumb =
+            Crumb(
+              kind: crumb.kind,
+              trivia: crumb.trivia,
+              left: new_left,
+              right: new_right,
+            )
+          Some(Zipper(focus: new_focus, crumbs: [new_crumb, ..rest]))
+        }
+        None -> None
+      }
+  }
+}
+
+fn do_right(zipper: Zipper(kind)) -> Option(Zipper(kind)) {
+  do_right_where(zipper, fn(_) { True })
+}
+
+fn do_right_where(
+  zipper: Zipper(kind),
+  predicate: fn(Node(kind)) -> Bool,
+) -> Option(Zipper(kind)) {
+  case zipper.crumbs {
+    [] -> None
+    [crumb, ..rest] ->
+      case
+        scan_right(crumb.right, predicate, [
+          NodeElement(zipper.focus),
+          ..crumb.left
+        ])
+      {
+        Some(#(new_left, new_focus, new_right)) -> {
+          let new_crumb =
+            Crumb(
+              kind: crumb.kind,
+              trivia: crumb.trivia,
+              left: new_left,
+              right: new_right,
+            )
+          Some(Zipper(focus: new_focus, crumbs: [new_crumb, ..rest]))
+        }
+        None -> None
+      }
   }
 }
 

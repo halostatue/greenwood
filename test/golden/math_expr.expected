@@ -1,0 +1,20 @@
+parsing: [1 + 2 * 3 + 4]
+rebuilt: [1 + 2 * 3 + 4]
+notds: 
+- Node(Root)
+  - Node(Operation)
+      leading: [" "]
+      trailing: [" "]
+    - Node(Operation)
+        leading: [" "]
+        trailing: [" "]
+      - "1" Token(Number)
+      - "+" Token(Add)
+      - Node(Operation)
+          leading: [" "]
+          trailing: [" "]
+        - "2" Token(Number)
+        - "*" Token(Mul)
+        - "3" Token(Number)
+    - "+" Token(Add)
+    - "4" Token(Number)

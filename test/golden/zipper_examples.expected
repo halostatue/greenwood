@@ -1,0 +1,26 @@
+=== Greenwood Zipper Examples ===
+
+--- Navigation ---
+down → Section(Introduction)
+down_last → Section(Editing)
+right → Section(Navigation)
+left → Section(Introduction)
+nth_child(2) → Section(Navigation)
+deep focus → Paragraph(Hello world)
+up_until(Document) → Document
+right_until(Editing) → Section(Editing)
+right_n_until(2 sections) → Section(Editing)
+
+--- Editing ---
+insert_right: now 4 sections
+insert_left: now 4 sections
+insert_down: focus now on → Paragraph(Inserted child)
+  parent children: 4
+before delete: focus on → Section(Navigation)
+after delete: focus on → Section(Editing)
+  remaining sections: 2
+set_focus heading → Heading(Replaced!)
+
+--- Search ---
+find_descendant(Paragraph) → Paragraph(Hello world)
+find in Navigation section → Paragraph(Zippers provide cursors)
