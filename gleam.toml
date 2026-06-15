@@ -1,5 +1,5 @@
 name = "greenwood"
-version = "1.1.0"
+version = "1.2.0"
 description = "A generic trivia-preserving concrete syntax tree for Gleam"
 licences = ["Apache-2.0"]
 gleam = ">= 1.14.0"
@@ -8,6 +8,27 @@ gleam = ">= 1.14.0"
 type = "github"
 user = "halostatue"
 repo = "greenwood"
+
+[[documentation.pages]]
+title = "Changelog"
+path = "changelog.html"
+source = "CHANGELOG.md"
+
+[[links]]
+title = "Licence"
+href = "https://github.com/halostatue/greenwood/blob/main/LICENCE.md"
+[[links]]
+title = "Security"
+href = "https://github.com/halostatue/greenwood/blob/main/SECURITY.md"
+[[links]]
+title = "Code of Conduct"
+href = "https://github.com/halostatue/greenwood/blob/main/CODE_OF_CONDUCT.md"
+[[links]]
+title = "Contributing"
+href = "https://github.com/halostatue/greenwood/blob/main/CONTRIBUTING.md"
+[[links]]
+title = "Sponsor"
+href = "https://github.com/sponsors/halostatue"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
@@ -25,4 +46,5 @@ function_complexity = "warning"
 module_complexity = "warning"
 
 [javascript.deno]
-allow_read = ["gleam.toml", "test"]
+allow_read = ["./"]
+allow_write = ["./test/golden"]

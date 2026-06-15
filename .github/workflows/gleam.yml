@@ -75,6 +75,16 @@ jobs:
       - run: gleam deps download
       - run: gleam build --warnings-as-errors
       - run: gleam test --target erlang
+      - name: Check examples against golden output
+        run: |
+          set -euo pipefail
+
+          for mod in math_expr s_expressions zipper_examples; do
+            gleam run -m "${mod}" \
+              --target erlang \
+              >"test/golden/$mod.actual"
+            diff -u "test/golden/$mod.expected" "test/golden/$mod.actual" && echo "Pass"
+          done
 
       - name: Format check
         if: matrix.quality
@@ -145,6 +155,16 @@ jobs:
 
       - run: gleam deps download
       - run: gleam test --target javascript --runtime bun
+      - name: Check examples against golden output
+        run: |
+          set -euo pipefail
+
+          for mod in math_expr s_expressions zipper_examples; do
+            gleam run -m "${mod}" \
+              --target javascript --runtime bun \
+              >"test/golden/$mod.actual"
+            diff -u "test/golden/$mod.expected" "test/golden/$mod.actual" && echo "Pass"
+          done
 
   test-deno:
     name: Gleam ${{ matrix.gleam }} OTP ${{ matrix.otp }} / Deno ${{ matrix.deno }}
@@ -208,6 +228,16 @@ jobs:
 
       - run: gleam deps download
       - run: gleam test --target javascript --runtime deno
+      - name: Check examples against golden output
+        run: |
+          set -euo pipefail
+
+          for mod in math_expr s_expressions zipper_examples; do
+            gleam run -m "${mod}" \
+              --target javascript --runtime deno \
+              >"test/golden/$mod.actual"
+            diff -u "test/golden/$mod.expected" "test/golden/$mod.actual" && echo "Pass"
+          done
 
   test-node:
     name: Gleam ${{ matrix.gleam }} OTP ${{ matrix.otp }} / Node ${{ matrix.node }}
@@ -271,3 +301,13 @@ jobs:
 
       - run: gleam deps download
       - run: gleam test --target javascript --runtime node
+      - name: Check examples against golden output
+        run: |
+          set -euo pipefail
+
+          for mod in math_expr s_expressions zipper_examples; do
+            gleam run -m "${mod}" \
+              --target javascript --runtime node \
+              >"test/golden/$mod.actual"
+            diff -u "test/golden/$mod.expected" "test/golden/$mod.actual" && echo "Pass"
+          done
