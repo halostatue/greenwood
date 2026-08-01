@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           disable-sudo: true
           egress-policy: block
@@ -59,7 +59,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         id: beam
         with:
           otp-version: ${{ matrix.otp }}
@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           disable-sudo: true
           egress-policy: block
@@ -135,7 +135,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         id: beam
         with:
           otp-version: ${{ matrix.otp }}
@@ -189,7 +189,7 @@ jobs:
 
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           disable-sudo: true
           egress-policy: block
@@ -208,14 +208,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         id: beam
         with:
           otp-version: ${{ matrix.otp }}
           gleam-version: ${{ matrix.gleam }}
           rebar3-version: "3"
 
-      - uses: denoland/setup-deno@667a34cdef165d8d2b2e98dde39547c9daac7282 # v2.0.4
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         id: deno
         with:
           deno-version: ${{ matrix.deno }}
@@ -263,7 +263,7 @@ jobs:
 
     steps:
       - name: Harden the runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
         with:
           disable-sudo: true
           egress-policy: block
@@ -281,7 +281,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: erlef/setup-beam@fc68ffb90438ef2936bbb3251622353b3dcb2f93 # v1.24.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         id: beam
         with:
           otp-version: ${{ matrix.otp }}
